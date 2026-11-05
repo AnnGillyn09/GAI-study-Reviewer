@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GAI – Study Reviewer</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1d2233;--mu:#667;--ac:#5b5bf0;--ac2:#ff7a59;--bd:#e3e5f0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#13151f;--card:#1d2030;--tx:#eceefa;--mu:#9aa0b8;--ac:#8a8aff;--ac2:#ff8f70;--bd:#2d3148;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#13151f;--card:#1d2030;--tx:#eceefa;--mu:#9aa0b8;--ac:#8a8aff;--ac2:#ff8f70;--bd:#2d3148;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+.wrap{max-width:900px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;margin-bottom:14px}
+h1,h2,h3{margin:0 0 8px}input,textarea,button{font:inherit;color:var(--tx)}
+input,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);margin:4px 0 10px}
+button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:9px 16px;cursor:pointer}
+button.alt{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.logo{font-size:28px;font-weight:800;letter-spacing:1px;color:var(--ac)}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+nav button{background:var(--card);color:var(--tx);border:1px solid var(--bd)}nav button.on{background:var(--ac);color:#fff}
+.hero{background:linear-gradient(135deg,var(--ac),var(--ac2));color:#fff;border:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.grid img{width:100%;height:130px;object-fit:cover;border-radius:10px}
+.fc{border:1px solid var(--bd);border-radius:10px;padding:10px;margin:6px 0;cursor:pointer}
+.mu{color:var(--mu);font-size:14px}.err{color:#e04848;font-size:14px}
+.mem{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:380px}
+.mem button{aspect-ratio:1;font-size:30px;background:var(--bd);padding:0}
+.mem button.up{background:var(--card);border:1px solid var(--ac)}
+.hide{display:none}
+mark{background:var(--ac2);color:#fff;border-radius:4px;padding:0 4px}
+</style></head><body><div class="wrap" id="app"></div>
+<script>
+const $=s=>document.querySelector(s);
+const ld=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
+let user=ld('gai_session',null),tab='home',D={},mem={};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function hash(p){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(p));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+const loadD=()=>{D=ld('gai_data_'+user,{reviewers:[],photos:[],links:[],voices:[]})};
+const saveD=()=>{if(!sv('gai_data_'+user,D))alert('Storage is full – some items may not be saved.')};
+
+function authView(mode='in',msg=''){
+ $('#app').innerHTML=`<div class="card hero" style="text-align:center;margin-top:30px"><div class="logo" style="color:#fff;font-size:44px">GAI</div><p>Generate study reviewers, save notes, and play to learn.</p></div>
+ <div class="card"><h2>${mode==='in'?'Log in':'Sign up'}</h2>
+ <label>Username<input id="u" autocomplete="username"></label>
+ <label>Password<input id="p" type="password" autocomplete="${mode==='in'?'current-password':'new-password'}"></label>
+ <div class="err">${msg}</div>
+ <button id="go">${mode==='in'?'Log in':'Create account'}</button>
+ <button class="alt" id="sw">${mode==='in'?'Need an account? Sign up':'Have an account? Log in'}</button>
+ <p class="mu">Accounts are stored only in this browser (demo).</p></div>`;
+ $('#sw').onclick=()=>authView(mode==='in'?'up':'in');
+ $('#go').onclick=async()=>{
+  const u=$('#u').value.trim().toLowerCase(),p=$('#p').value;
+  if(u.length<3||p.length<4)return authView(mode,'Username 3+ chars, password 4+ chars.');
+  const users=ld('gai_users',{}),h=await hash(p);
+  if(mode==='up'){if(users[u])return authView('up','Username already taken.');users[u]=h;sv('gai_users',users)}
+  else if(users[u]!==h)return authView('in','Wrong username or password.');
+  user=u;sv('gai_session',u);loadD();tab='home';render()}
+}
+function logout(){user=null;sv('gai_session',null);authView()}
+
+function render(){
+ if(!user)return authView();
+ $('#app').innerHTML=`<header><div class="logo">GAI</div><div><span class="mu">Hi, ${esc(user)}</span> <button class="alt" id="lo">Log out</button></div></header>
+ <nav>${[['home','🏠 Home'],['rev','📝 Reviewer'],['media','🖼️ Photos & Links'],['voice','🎙️ Voice'],['game','🎮 Game']].map(([k,l])=>`<button data-t="${k}" class="${tab===k?'on':''}">${l}</button>`).join('')}</nav><div id="view"></div>`;
+ $('#lo').onclick=logout;
+ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
+ ({home:home,rev:rev,media:media,voice:voice,game:game})[tab]();
+}
+function home(){
+ $('#view').innerHTML=`<div class="card hero"><h1>Welcome to GAI</h1><p>Your study buddy: turn notes into a reviewer, keep photos and links, record voice messages, and take a game break.</p></div>
+ <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+ <div class="card"><h3>${D.reviewers.length}</h3>Reviewers saved</div><div class="card"><h3>${D.photos.length}</h3>Photos</div>
+ <div class="card"><h3>${D.links.length}</h3>Links</div><div class="card"><h3>${D.voices.length}</h3>Voice messages</div></div>`;
+}
+
+const STOP=new Set('the a an and or of to in on for with is are was were be been it its this that these those as at by from which who whom what when where why how can will would should could may might not but if then than so such into about over under also has have had their there they them he she his her we you your our i'.split(' '));
+function makeReviewer(title,text){
+ const sents=text.replace(/\s+/g,' ').match(/[^.!?]+[.!?]*/g)?.map(s=>s.trim()).filter(s=>s.split(' ').length>=5)||[];
+ const freq={};text.toLowerCase().match(/[a-z][a-z'-]{3,}/g)?.forEach(w=>{if(!STOP.has(w))freq[w]=(freq[w]||0)+1});
+ const terms=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,12).map(e=>e[0]);
+ const score=s=>(s.toLowerCase().match(/[a-z][a-z'-]{3,}/g)||[]).reduce((n,w)=>n+(freq[w]||0),0)/Math.sqrt(s.length);
+ const summary=sents.map((s,i)=>({s,i,sc:score(s)})).sort((a,b)=>b.sc-a.sc).slice(0,Math.min(5,sents.length)).sort((a,b)=>a.i-b.i).map(x=>x.s);
+ const cards=terms.map(t=>({t,d:sents.find(s=>s.toLowerCase().includes(t))})).filter(c=>c.d).slice(0,10);
+ const quiz=cards.map(c=>({q:c.d.replace(new RegExp(c.t,'i'),'_____'),a:c.t}));
+ return{id:Date.now(),title:title||'Untitled',summary,terms,cards,quiz}
+}
+function rev(){
+ $('#view').innerHTML=`<div class="card"><h2>Generate a reviewer</h2>
+ <input id="rt" placeholder="Topic / title"><textarea id="rx" rows="7" placeholder="Paste your notes or lesson text here…"></textarea>
+ <button id="gen">Generate reviewer</button> <span class="err" id="re"></span></div><div id="out"></div>
+ <h2>Saved reviewers</h2><div id="saved"></div>`;
+ const show=r=>{$('#out').innerHTML=card(r)};
+ const card=r=>`<div class="card"><h2>${esc(r.title)}</h2><h3>Summary</h3><ul>${r.summary.map(s=>`<li>${esc(s)}</li>`).join('')}</ul>
+ <h3>Key terms</h3><p>${r.terms.map(t=>`<mark>${esc(t)}</mark>`).join(' ')}</p>
+ <h3>Flashcards <span class="mu">(tap to reveal)</span></h3>${r.cards.map(c=>`<div class="fc" onclick="this.querySelector('span').classList.toggle('hide')"><b>${esc(c.t)}</b><br><span class="hide">${esc(c.d)}</span></div>`).join('')}
+ <h3>Practice quiz</h3><ol>${r.quiz.map(q=>`<li>${esc(q.q)} <details><summary class="mu">Answer</summary>${esc(q.a)}</details></li>`).join('')}</ol>
+ <button class="alt" onclick="window.print()">Print</button></div>`;
+ const list=()=>{$('#saved').innerHTML=D.reviewers.length?D.reviewers.map(r=>`<div class="card"><b>${esc(r.title)}</b> <button class="alt" data-o="${r.id}">Open</button> <button class="alt" data-d="${r.id}">Delete</button></div>`).join(''):'<p class="mu">Nothing saved yet.</p>';
+  document.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{show(D.reviewers.find(r=>r.id==b.dataset.o));scrollTo(0,0)});
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{D.reviewers=D.reviewers.filter(r=>r.id!=b.dataset.d);saveD();list()})};
+ list();
+ $('#gen').onclick=()=>{const x=$('#rx').value;if(x.trim().split(/\s+/).length<20)return $('#re').textContent='Add at least ~20 words of notes.';
+  $('#re').textContent='';const r=makeReviewer($('#rt').value.trim(),x);D.reviewers.unshift(r);saveD();show(r);list()};
+}
+
+function shrink(file){return new Promise(res=>{const im=new Image(),u=URL.createObjectURL(file);im.onload=()=>{const k=Math.min(1,800/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.75))};im.src=u})}
+function media(){
+ $('#view').innerHTML=`<div class="card"><h2>Photos</h2><input type="file" id="ph" accept="image/*" multiple><div class="grid" id="pg"></div></div>
+ <div class="card"><h2>Links &amp; files</h2><input id="lt" placeholder="Title (e.g., Biology video)"><input id="lu" placeholder="https://…"><button id="la">Add link</button><div id="ll"></div></div>`;
+ const draw=()=>{$('#pg').innerHTML=D.photos.map((p,i)=>`<div><img src="${p}" alt="Photo ${i+1}"><button class="alt" data-p="${i}">Remove</button></div>`).join('')||'<span class="mu">No photos yet.</span>';
+  $('#ll').innerHTML=D.links.map((l,i)=>`<p><a href="${esc(l.u)}" target="_blank" rel="noopener noreferrer">${esc(l.t)}</a> <button class="alt" data-l="${i}">✕</button></p>`).join('');
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{D.photos.splice(b.dataset.p,1);saveD();draw()});
+  document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{D.links.splice(b.dataset.l,1);saveD();draw()})};
+ draw();
+ $('#ph').onchange=async e=>{for(const f of e.target.files)D.photos.push(await shrink(f));saveD();draw()};
+ $('#la').onclick=()=>{let u=$('#lu').value.trim();if(!u)return;if(!/^https?:\/\//i.test(u))u='https://'+u;D.links.push({t:$('#lt').value.trim()||u,u});saveD();$('#lt').value=$('#lu').value='';draw()};
+}
+
+let rec,chunks=[];
+function voice(){
+ $('#view').innerHTML=`<div class="card"><h2>Voice messages</h2><p class="mu">Record a reminder or explain a topic out loud.</p>
+ <input id="vn" placeholder="Name (e.g., Chapter 3 recap)"><button id="rs">● Record</button> <button class="alt" id="rx2" disabled>■ Stop &amp; save</button><div class="err" id="ve"></div><div id="vl"></div></div>`;
+ const draw=()=>{$('#vl').innerHTML=D.voices.map((v,i)=>`<p><b>${esc(v.n)}</b><br><audio controls src="${v.d}"></audio> <button class="alt" data-v="${i}">✕</button></p>`).join('');
+  document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{D.voices.splice(b.dataset.v,1);saveD();draw()})};
+ draw();
+ $('#rs').onclick=async()=>{try{const st=await navigator.mediaDevices.getUserMedia({audio:true});rec=new MediaRecorder(st);chunks=[];
+  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=()=>{st.getTracks().forEach(t=>t.stop());const fr=new FileReader();fr.onload=()=>{D.voices.unshift({n:$('#vn').value.trim()||'Voice message',d:fr.result});saveD();draw()};fr.readAsDataURL(new Blob(chunks,{type:rec.mimeType}))};
+  rec.start();$('#rs').disabled=true;$('#rx2').disabled=false;$('#ve').textContent='Recording…'}catch(e){$('#ve').textContent='Microphone not available or permission denied.'}};
+ $('#rx2').onclick=()=>{rec&&rec.state!=='inactive'&&rec.stop();$('#rs').disabled=false;$('#rx2').disabled=true;$('#ve').textContent=''};
+}
+
+function game(){
+ const E=['🧠','📚','🚀','🎯','⭐','🔬','🎨','🧩'],deck=[...E,...E].sort(()=>Math.random()-.5);
+ mem={open:[],done:new Set(),moves:0,lock:false};
+ $('#view').innerHTML=`<div class="card"><h2>Memory Match</h2><p class="mu">Find all pairs. Moves: <b id="mv">0</b></p><div class="mem" id="mb"></div><p id="win"></p><button class="alt" id="nw">New game</button></div>`;
+ const draw=()=>{$('#mb').innerHTML=deck.map((e,i)=>{const up=mem.open.includes(i)||mem.done.has(i);return `<button data-i="${i}" class="${up?'up':''}" aria-label="card">${up?e:'?'}</button>`}).join('');
+  document.querySelectorAll('#mb button').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(mem.lock||mem.open.includes(i)||mem.done.has(i))return;mem.open.push(i);draw();
+   if(mem.open.length===2){mem.moves++;$('#mv').textContent=mem.moves;const[a,c]=mem.open;
+    if(deck[a]===deck[c]){mem.done.add(a);mem.done.add(c);mem.open=[];draw();if(mem.done.size===16)$('#win').innerHTML='🎉 You won in <b>'+mem.moves+'</b> moves!'}
+    else{mem.lock=true;setTimeout(()=>{mem.open=[];mem.lock=false;draw()},700)}}})};
+ draw();$('#nw').onclick=game;
+}
+if(user)loadD();render();
+</script></body></html>
+
